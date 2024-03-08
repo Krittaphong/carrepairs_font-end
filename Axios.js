@@ -5,7 +5,8 @@ const app = express();
 const bodyParser = require('body-parser');
 const multer = require('multer');
 
-const base_url = "https://carrepairs-back-end-g6j7.onrender.com";
+//const base_url = "https://carrepairs-back-end.onrender.com";
+ const base_url = "http://localhost:3000";
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname,'/public/views'));
@@ -44,12 +45,25 @@ app.get("/spareparts", async (req, res) => {
 });
 
 app.get("/addpart", async (req, res) => {
-    try {
-        return res.render("addpart", {addpart: true, addcustomer: false, addsupplier: false, addrepair: false});
+    try {        
+        const response = await axios.get(base_url + "/suppliers");
+        const suppliers = response.data;
+
+        const data = [];
+        for (let spl of suppliers) {
+            data.push(spl.name);
+        }
+
+        return res.render("addpart", {check: false, data_spl: data, addpart: true, addcustomer: false, addsupplier: false, addrepair: false});
     } catch (err) {
         console.error(err);
         res.status(500).send('Error addpart');
     }
+});
+
+app.get('/autosupplier.js', function(req, res) {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.sendFile(__dirname + '/public/views/autosupplier.js'); 
 });
 
 app.post("/addpart", ap.single('image'), async (req, res) => {
@@ -65,7 +79,15 @@ app.post("/addpart", ap.single('image'), async (req, res) => {
         }
 
         if (IDSupplier == null || !req.file) {
-            return res.redirect("/spareparts");
+            const response = await axios.get(base_url + "/suppliers");
+            const suppliers = response.data;
+    
+            const data = [];
+            for (let sp of suppliers) {
+                data.push(sp.name);
+            }
+
+            return res.render("addpart", {check: true, data_spl: data, addpart: true, addcustomer: false, addsupplier: false, addrepair: false});
         } 
 
         const data = {
@@ -128,7 +150,15 @@ app.get("/deletepart/:id", async (req, res) => {
 app.get("/repairs", async (req, res) => {
     try {
         const response = await axios.get(base_url + "/repairs");
-        return res.render("repairs", {rp: response.data, addpart: false, addcustomer: false, addsupplier: false, addrepair: true});
+        const repairs = response.data;
+
+        const carcode = [];
+        for (let rp of repairs) {
+            const response2 = await axios.get(base_url + "/customers/" + rp.customerID);
+            const customer = response2.data;
+            carcode.push(customer);
+        }
+        return res.render("repairs", {rp: response.data, cm: carcode, addpart: false, addcustomer: false, addsupplier: false, addrepair: true});
     } catch (err) {
         console.error(err);
         res.status(500).send('Error repairs');
@@ -138,7 +168,10 @@ app.get("/repairs", async (req, res) => {
 app.get("/repairinfo/:id", async (req, res) => {
     try {
         const response = await axios.get(base_url + "/repairs/" + req.params.id);
-        return res.render("repairinfo", {rp_one: response.data, addpart: false, addcustomer: false, addsupplier: false, addrepair: true});
+        const repair = response.data;
+        const response2 = await axios.get(base_url + "/customers/" + repair.customerID);
+        const response3 = await axios.get(base_url + "/spareparts/" + repair.spareID);
+        return res.render("repairinfo", {rp_one: response.data, cm_one: response2.data, sp_one: response3.data, addpart: false, addcustomer: false, addsupplier: false, addrepair: true});
     } catch (err) {
         console.error(err);
         res.status(500).send('Error repairinfo');
@@ -147,11 +180,30 @@ app.get("/repairinfo/:id", async (req, res) => {
 
 app.get("/addrepair", async (req, res) => {
     try {
-        return res.render("addrepair", {addpart: false, addcustomer: false, addsupplier: false, addrepair: true});
+        const response = await axios.get(base_url + "/customers");
+        const response2 = await axios.get(base_url + "/spareparts");
+        const customers = response.data;
+        const spareparts = response2.data;
+
+        const data1 = [];
+        for (let cm of customers) {
+            data1.push(cm.name);
+        }
+        const data2 = [];
+        for (let sp of spareparts) {
+            data2.push(sp.name);
+        }
+
+        return res.render("addrepair", {check: false, data_cm: data1, data_sp: data2, addpart: false, addcustomer: false, addsupplier: false, addrepair: true});
     } catch (err) {
         console.error(err);
         res.status(500).send('Error addrepair');
     }
+});
+
+app.get('/autorepair.js', function(req, res) {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.sendFile(__dirname + '/public/views/autorepair.js'); 
 });
 
 app.post("/addrepair", async (req, res) => {
@@ -161,10 +213,14 @@ app.post("/addrepair", async (req, res) => {
         const customers = response.data;
         const spareparts = response2.data;
 
+        let customer = null;
+        let sparepart = null;
         for (let cm of customers) {
             if (cm.name == req.body.customer) {
+                customer = cm.name;
                 for (let sp of spareparts) {
                     if (sp.name == req.body.spare) {
+                        sparepart = sp.name;
                         const data = {
                             customerID: cm.customerID,
                             spareID: sp.spareID,
@@ -177,7 +233,19 @@ app.post("/addrepair", async (req, res) => {
             }
         }
 
-        return res.redirect("repairs");
+        if (customer == null || sparepart == null) {
+            const data1 = [];
+            for (let cm of customers) {
+                data1.push(cm.name);
+            }
+            const data2 = [];
+            for (let sp of spareparts) {
+                data2.push(sp.name);
+            }
+            return res.render("addrepair", {check: true, data_cm: data1, data_sp: data2, addpart: false, addcustomer: false, addsupplier: false, addrepair: true});
+        }
+
+        return res.redirect("/repairs");
     } catch (err) {
         console.error(err);
         res.status(500).send('Error addrepair post');
